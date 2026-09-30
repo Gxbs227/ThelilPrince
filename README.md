@@ -115,6 +115,30 @@ Story gestures (from `gestures.py`, selectable in `StoryGestureTrigger`):
 
 Speeds, dead zone and smoothing can be changed in the Inspector. The defaults are deliberately slow and floaty to match the relaxed, no-pressure tone.
 
+### Guided walk (the camera moves by itself)
+
+To keep the experience free of pressure, the visitor doesn't have to steer. `GuidedPathWalker` (on the Player) moves the camera slowly along a path and pauses at points of interest. The hand only **looks around, aims and touches**:
+
+| Hand | Guided walk |
+|---|---|
+| move hand left / right / up / down | turn your head a little (up to 35° / 18°) |
+| ☝️ Point | aim the cursor at things |
+| 🤏 Pinch | touch what the cursor is on; the view holds still |
+| ✊ Fist | pause the walk; open the hand to continue |
+
+- **The path:** an object with `GuidedPath`. Its **child objects are the waypoints**, in Hierarchy order, and the curve is drawn in the Scene view. Place the waypoints on the ground; tick **Loop** for a circuit.
+- **Pauses:** add `PathStop` to a waypoint to pause there. The walk continues after:
+  - **Seconds**: a few seconds (a nice view);
+  - **Interaction**: touching the listed objects;
+  - **StoryStep**: when the story reaches step #N (the number in the overlay);
+  - **Resume**: a call from your own scripts.
+
+  **Max Wait Seconds** always continues the walk eventually, and **Look At** turns the view toward something while waiting.
+- **Settings:** speed, softness, how far the head turns, and ground snapping are all on the `GuidedPathWalker`. While it's enabled, `HandCameraController` is switched off; disable the walker to walk freely again.
+- **Where it's already set up:**
+  - The **test scene** has a slow loop around the garden that pauses at three flowers until you pinch one (or after 20 s).
+  - **Add Story Flow (from flowchart)** creates a path for the desert, garden and village. The stops are tied to the story: roses → step 6, children → step 8, station and switchman → step 10, bush and fox → step 13. Each stage's first step starts its path (`Follow Path`). Steps with *Allow Walking* off hold the walk.
+
 ### Story flow (from the flowchart)
 
 [`docs/Experience_Flow_Chart.pdf`](docs/Experience_Flow_Chart.pdf) is implemented by `StoryFlowManager` (`Unity/Assets/LittlePrince/Story/`). In any scene choose **Little Prince → Add Story Flow (from flowchart)**. It adds all 18 steps below, plus these placeholders for your real environments:

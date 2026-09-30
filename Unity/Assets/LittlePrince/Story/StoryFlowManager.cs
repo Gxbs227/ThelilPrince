@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using LittlePrince.GuidedWalk;
 using LittlePrince.HandTracking;
 using UnityEngine;
 using UnityEngine.Events;
@@ -54,8 +55,10 @@ namespace LittlePrince.Story
         public string incorrectText = "";
         [Tooltip("Move on by itself after this many seconds, so nobody gets stuck. 0 = never.")]
         public float autoAdvanceAfterSeconds = 45f;
-        [Tooltip("Can the visitor walk / look around during this step?")]
+        [Tooltip("Can the visitor walk during this step? (With a guided walk: does the walk keep going?)")]
         public bool allowWalking = true;
+        [Tooltip("Guided walk: start following this path when the step starts (usually the first step of a stage).")]
+        public GuidedPath followPath;
         [Tooltip("Optional: move the player here when the step starts.")]
         public Transform teleportPlayerTo;
 
@@ -90,6 +93,8 @@ namespace LittlePrince.Story
         public List<StageRoot> stageRoots = new List<StageRoot>();
 
         public HandCameraController player;
+        [Tooltip("Guided walk on the Player. If set, steps start paths and pause/continue the walk.")]
+        public GuidedPathWalker guide;
         public bool startOnPlay = true;
         public bool loop = true;
 
@@ -116,6 +121,8 @@ namespace LittlePrince.Story
         public float StepTime { get; private set; }
         public int RepetitionsDone { get; private set; }
         public string CurrentHint { get; private set; } = "";
+        /// <summary>How many times the story went back to the start.</summary>
+        public int LoopCount { get; private set; }
 
         HandTrackingReceiver _receiver;
         bool _hintShown, _videoDone;
@@ -125,6 +132,7 @@ namespace LittlePrince.Story
         void Start()
         {
             if (player == null) player = FindObjectOfType<HandCameraController>();
+            if (guide == null) guide = FindObjectOfType<GuidedPathWalker>();
             if (startOnPlay) Restart();
         }
 
@@ -151,6 +159,7 @@ namespace LittlePrince.Story
             if (index >= steps.Count)
             {
                 if (!loop) { CurrentIndex = steps.Count; SetHint(""); return; }
+                LoopCount++;
                 Looped?.Invoke();
                 index = 0;
             }
@@ -166,7 +175,15 @@ namespace LittlePrince.Story
             var step = steps[index];
             SetStage(step.stage);
             if (player != null) player.InputEnabled = step.allowWalking;
-            if (step.teleportPlayerTo != null && player != null) Teleport(player.transform, step.teleportPlayerTo);
+            if (guide != null)
+            {
+                guide.AllowMoving = step.allowWalking;
+                if (step.followPath != null) guide.StartPath(step.followPath);
+                else if (step.teleportPlayerTo != null) guide.StopPath(); // let the teleport below win
+            }
+            Transform body = player != null ? player.transform : guide != null ? guide.transform : null;
+            bool pathPlacesPlayer = guide != null && step.followPath != null;
+            if (step.teleportPlayerTo != null && !pathPlacesPlayer && body != null) Teleport(body, step.teleportPlayerTo);
             if (step.type == StepType.Video && step.video != null)
             {
                 step.video.loopPointReached -= OnVideoFinished;
@@ -207,7 +224,8 @@ namespace LittlePrince.Story
             switch (step.type)
             {
                 case StepType.ReachArea:
-                    if (step.area != null && player != null && step.area.bounds.Contains(player.transform.position))
+                    var who = player != null ? player.transform : guide != null ? guide.transform : null;
+                    if (step.area != null && who != null && step.area.bounds.Contains(who.position))
                     { CompleteCurrentStep(); return; }
                     break;
                 case StepType.Timed:

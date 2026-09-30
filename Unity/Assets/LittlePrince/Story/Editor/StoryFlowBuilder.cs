@@ -1,3 +1,4 @@
+using LittlePrince.GuidedWalk;
 using LittlePrince.HandTracking;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -55,9 +56,34 @@ namespace LittlePrince.Story.EditorTools
             Collider gate = Area(stageRoots[0], "Area - Gate to the garden", new Vector3(0f, 1.5f, 20f));
             Collider cliff = Area(stageRoots[1], "Area - Cliff", new Vector3(0f, 1.5f, 25f));
 
+            // ---- Guided walk paths (placeholders: drag the waypoints onto your environments) ----
+            // Stop numbers refer to the step numbers below (the story overlay shows them too).
+            var introPath = Path(stageRoots[0], "Path - Desert to the gate",
+                (new Vector3(0f, 0f, -8f), null), (new Vector3(0f, 0f, 0f), null),
+                (new Vector3(2f, 0f, 10f), null), (new Vector3(0f, 0f, 22f), null));
+            var gardenPath = Path(stageRoots[1], "Path - Garden to the cliff",
+                (new Vector3(0f, 0f, -8f), null),
+                (new Vector3(0f, 0f, 2f), Stop("Stop - Roses", continueAtStep: 6)),
+                (new Vector3(3f, 0f, 12f), null), (new Vector3(0f, 0f, 27f), null));
+            var villagePath = Path(stageRoots[2], "Path - Village",
+                (new Vector3(0f, 0f, -8f), null),
+                (new Vector3(0f, 0f, 2f), Stop("Stop - Children", continueAtStep: 8)),
+                (new Vector3(6f, 0f, 14f), Stop("Stop - Train station and switchman", continueAtStep: 10)),
+                (new Vector3(0f, 0f, 26f), Stop("Stop - Bush and fox", continueAtStep: 13)),
+                (new Vector3(-2f, 0f, 34f), null));
+
+            // Guided walk on the player: the camera follows the paths, the hand only looks and touches.
+            if (flow.player != null)
+            {
+                var walker = flow.player.GetComponent<GuidedPathWalker>();
+                if (walker == null) walker = Undo.AddComponent<GuidedPathWalker>(flow.player.gameObject);
+                walker.startOnPlay = false; // the story flow starts each stage's path
+                flow.guide = walker;
+            }
+
             // ---- The flowchart -------------------------------------------------------
             // Intro
-            Add(flow, StoryStage.Intro, "Black space", StepType.Timed, duration: 4f, walk: false, start: starts[0]);
+            Add(flow, StoryStage.Intro, "Black space", StepType.Timed, duration: 4f, walk: false, start: starts[0]).followPath = introPath;
             Add(flow, StoryStage.Intro, "Sky becomes full of stars", StepType.Gesture, walk: false,
                 gestures: new[] { StoryGesture.ClaspOpenUpward },
                 hint: "Open and close your hand as you raise it toward the sky…");
@@ -71,14 +97,14 @@ namespace LittlePrince.Story.EditorTools
             // Garden
             Add(flow, StoryStage.Garden, "Interact with the roses that light up", StepType.Gesture, start: starts[1],
                 gestures: new[] { StoryGesture.PickForward }, repetitions: 3,
-                hint: "Reach forward and pick the glowing roses.");
+                hint: "Reach forward and pick the glowing roses.").followPath = gardenPath;
             Add(flow, StoryStage.Garden, "Lead to the cliff for second stage", StepType.ReachArea, area: cliff,
                 hint: "Follow the path to the cliff.", autoAdvance: 60f);
 
             // Village
             Add(flow, StoryStage.Village, "Interaction with some children", StepType.Gesture, start: starts[2],
                 gestures: new[] { StoryGesture.WaveRapid },
-                hint: "Wave hello to the children!");
+                hint: "Wave hello to the children!").followPath = villagePath;
             Add(flow, StoryStage.Village, "Navigate through the village to train station", StepType.Gesture,
                 gestures: new[] { StoryGesture.ClaspSwingRun },
                 hint: "Close your hand and swing it, as if running.");
@@ -144,6 +170,28 @@ namespace LittlePrince.Story.EditorTools
             };
             flow.steps.Add(step);
             return step;
+        }
+
+        static PathStop Stop(string name, int continueAtStep)
+        {
+            var stop = new GameObject(name).AddComponent<PathStop>();
+            stop.waitFor = PathStop.WaitFor.StoryStep;
+            stop.continueAtStep = continueAtStep;
+            stop.maxWaitSeconds = 60f;
+            return stop;
+        }
+
+        static GuidedPath Path(Transform parent, string name, params (Vector3 pos, PathStop stop)[] points)
+        {
+            var path = new GameObject(name).AddComponent<GuidedPath>();
+            path.transform.SetParent(parent, false);
+            for (int i = 0; i < points.Length; i++)
+            {
+                var wp = points[i].stop != null ? points[i].stop.transform : new GameObject($"Waypoint {i + 1}").transform;
+                wp.SetParent(path.transform, false);
+                wp.localPosition = points[i].pos;
+            }
+            return path;
         }
 
         static Collider Area(Transform parent, string name, Vector3 localPos)

@@ -1,4 +1,5 @@
 using System.IO;
+using LittlePrince.GuidedWalk;
 using LittlePrince.HandTracking.Demo;
 using UnityEditor;
 using UnityEditor.Events;
@@ -72,9 +73,9 @@ namespace LittlePrince.HandTracking.EditorTools
             cam.nearClipPlane = 0.05f;
             camGo.AddComponent<AudioListener>();
 
-            var walker = player.AddComponent<HandCameraController>();
-            walker.pitchPivot = camGo.transform;
-            walker.maxDistanceFromStart = 20f;
+            var manual = player.AddComponent<HandCameraController>();
+            manual.pitchPivot = camGo.transform;
+            manual.maxDistanceFromStart = 20f;
 
             // ---- Hand tracking -------------------------------------------------------
             var tracking = new GameObject("Hand Tracking");
@@ -92,12 +93,13 @@ namespace LittlePrince.HandTracking.EditorTools
                 new Color(1f, 0.55f, 0.6f), new Color(1f, 0.8f, 0.45f), new Color(0.7f, 0.6f, 1f),
                 new Color(1f, 0.65f, 0.4f), new Color(0.55f, 0.8f, 1f), new Color(1f, 0.5f, 0.75f),
             };
+            var flowers = new GameObject[12];
             for (int i = 0; i < 12; i++)
             {
                 float angle = i * Mathf.PI * 2f / 12f;
                 float radius = 3f + (i % 3) * 1.6f;
                 var pos = new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-                CreateFlower($"Flower {i + 1}", pos, stemMat, headMat, blooms[i % blooms.Length]);
+                flowers[i] = CreateFlower($"Flower {i + 1}", pos, stemMat, headMat, blooms[i % blooms.Length]);
             }
 
             // A "rose under its glass dome" in the middle, as a larger target.
@@ -115,10 +117,51 @@ namespace LittlePrince.HandTracking.EditorTools
             story.hoverTarget = rose.GetComponent<HandInteractable>();
             UnityEventTools.AddPersistentListener(story.onDetected, roseFlower.Toggle);
 
+            // ---- Guided walk: a slow loop around the garden, pausing at three flowers ----
+            // (Disable the GuidedPathWalker on the Player to walk freely with HandCameraController instead.)
+            var path = new GameObject("Guided Path - Garden loop").AddComponent<GuidedPath>();
+            path.loop = true;
+            const int pathPoints = 8;
+            for (int i = 0; i < pathPoints; i++)
+            {
+                float a = -Mathf.PI / 2f + i * Mathf.PI * 2f / pathPoints; // start in front of the player
+                var p = new Vector3(Mathf.Cos(a) * 8f, 0f, Mathf.Sin(a) * 8f);
+                Transform wp;
+                if (i % 3 == 1) // a stop at every third waypoint, facing the nearest outer flower
+                {
+                    var stop = new GameObject($"Stop {i / 3 + 1} - touch a flower").AddComponent<PathStop>();
+                    var flower = Nearest(flowers, p);
+                    stop.waitFor = PathStop.WaitFor.Interaction;
+                    stop.interactables = new[] { flower.GetComponent<HandInteractable>() };
+                    stop.lookAt = flower.transform;
+                    stop.maxWaitSeconds = 20f;
+                    wp = stop.transform;
+                }
+                else wp = new GameObject($"Waypoint {i + 1}").transform;
+                wp.SetParent(path.transform, false);
+                wp.localPosition = p;
+            }
+            var guide = player.AddComponent<GuidedPathWalker>();
+            guide.path = path;
+            guide.pitchPivot = camGo.transform;
+            player.transform.position = new Vector3(0f, 0.05f, -8f);
+
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.Refresh();
             Selection.activeGameObject = tracking;
             Debug.Log($"[HandTracking] Test scene created at {ScenePath}. Press Play, Python starts by itself (or use the mouse).");
+        }
+
+        static GameObject Nearest(GameObject[] objects, Vector3 to)
+        {
+            GameObject best = null;
+            float bestDist = float.MaxValue;
+            foreach (var o in objects)
+            {
+                float d = (o.transform.position - to).sqrMagnitude;
+                if (d < bestDist) { bestDist = d; best = o; }
+            }
+            return best;
         }
 
         static GameObject CreateFlower(string name, Vector3 pos, Material stemMat, Material headMat, Color bloom)
