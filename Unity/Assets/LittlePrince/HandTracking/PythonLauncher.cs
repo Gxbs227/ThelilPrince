@@ -77,6 +77,12 @@ namespace LittlePrince.HandTracking
                 return;
             }
 
+            string assets = Path.GetFullPath(Application.dataPath).TrimEnd('\\', '/');
+            if (Application.isEditor && Path.GetFullPath(folder).StartsWith(assets, StringComparison.OrdinalIgnoreCase))
+                Debug.LogWarning("[Python] The HandTracking-Python folder is inside Assets/. Unity will try to import " +
+                                 "the thousands of files in its .venv, which makes the Editor slow and can cause errors. " +
+                                 "Move it next to Assets/ (into the project folder) and recreate the .venv there.");
+
             string python = FindPythonExecutable(folder);
             var args = new StringBuilder($"-u \"{ScriptName}\" --port {port} --hands {hands}");
             if (cameraIndex >= 0) args.Append($" --camera {cameraIndex}");
@@ -105,6 +111,9 @@ namespace LittlePrince.HandTracking
                 {
                     if (string.IsNullOrEmpty(e.Data)) return;
                     lock (_errors) _errors.AppendLine(e.Data);
+                    // Show Python's errors/warnings right away, not only if it crashes
+                    // (MediaPipe's own start-up chatter is skipped).
+                    if (!IsMediaPipeNoise(e.Data)) Debug.LogWarning("[Python] " + e.Data);
                 };
                 _process.Start();
                 _process.BeginOutputReadLine();
@@ -112,6 +121,7 @@ namespace LittlePrince.HandTracking
                 Status = "running";
                 Debug.Log($"[Python] Started: {python} {args}\n  in {folder}");
                 StartCoroutine(WatchForCrash());
+                StartCoroutine(WarnIfNoData());
             }
             catch (Exception e)
             {
@@ -138,6 +148,23 @@ namespace LittlePrince.HandTracking
             _process.Dispose();
             _process = null;
         }
+
+        IEnumerator WarnIfNoData()
+        {
+            yield return new WaitForSecondsRealtime(25f);
+            var receiver = HandTrackingReceiver.Instance;
+            if (IsRunning && receiver != null && !receiver.IsConnected)
+                Debug.LogWarning("[Python] Python has been running for 25 s but no hand data has arrived. " +
+                                 "Look for the 'Little Prince -> Unity' camera window (it can open BEHIND Unity), " +
+                                 "and check that no other app (Zoom, Teams, Camera) is using the webcam. " +
+                                 "To see everything Python prints, stop Play and run it by hand in the HandTracking-Python folder:  " +
+                                 ".venv\\Scripts\\python.exe unity_sender.py");
+        }
+
+        static bool IsMediaPipeNoise(string line) =>
+            line.StartsWith("W0000") || line.StartsWith("I0000") || line.StartsWith("INFO:") ||
+            line.Contains("absl::InitializeLog") || line.Contains("inference_feedback_manager") ||
+            line.Contains("landmark_projection_calculator") || line.StartsWith("WARNING: All log messages before");
 
         void OnDisable() => StopPython();
         void OnApplicationQuit() => StopPython();
