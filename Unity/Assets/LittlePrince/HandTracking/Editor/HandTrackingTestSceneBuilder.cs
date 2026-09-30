@@ -80,6 +80,7 @@ namespace LittlePrince.HandTracking.EditorTools
             var tracking = new GameObject("Hand Tracking");
             tracking.AddComponent<HandTrackingReceiver>();
             tracking.AddComponent<HandDebugVisualizer>();
+            tracking.AddComponent<PythonLauncher>();
             var cursor = tracking.AddComponent<HandCursor>();
             cursor.targetCamera = cam;
 
@@ -117,7 +118,7 @@ namespace LittlePrince.HandTracking.EditorTools
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.Refresh();
             Selection.activeGameObject = tracking;
-            Debug.Log($"[HandTracking] Test scene created at {ScenePath}. Press Play, then run unity_sender.py or mock_sender.py (or use the mouse).");
+            Debug.Log($"[HandTracking] Test scene created at {ScenePath}. Press Play, Python starts by itself (or use the mouse).");
         }
 
         static GameObject CreateFlower(string name, Vector3 pos, Material stemMat, Material headMat, Color bloom)

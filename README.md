@@ -69,9 +69,16 @@ Each hand is sent with:
 
 With no Python running, the **mouse acts as the hand**: move to aim, hold left for pinch, hold right for open palm (walk), and hold both for fist. WASD or the arrow keys also move the camera.
 
+**Python starts by itself.** The `PythonLauncher` component (already in the test scene and the story flow) starts `unity_sender.py` when you press Play and closes it when you press Stop. Python's messages and errors appear in Unity's Console with the prefix `[Python]`.
+- **Finding the folder:** it looks for `HandTracking-Python` inside, next to, or one level around the Unity project. For a build, it looks next to the `.exe`.
+- **If it isn't found:** use **Little Prince → Set Python Folder…** once. The choice is saved on that computer only, so each teammate can keep the folder wherever they like.
+- **Which Python:** it uses the folder's `.venv`. Create it once with `python -m venv .venv` and `.venv\Scripts\python.exe -m pip install -r requirements.txt`.
+- **Already running by hand:** if Python is already running, it doesn't start a second one.
+- **Inspector options:** camera index, 1 or 2 hands, show or hide the webcam window, and whether to launch in builds (for the exhibition PC).
+
 To add hand tracking to your own scenes, add these components:
 
-- One `HandTrackingReceiver` in the scene (add `HandDebugVisualizer` next to it while testing).
+- One `HandTrackingReceiver` in the scene (add `HandDebugVisualizer` next to it while testing, and `PythonLauncher` to start Python automatically: **Little Prince → Add Python Launcher to Scene**).
 - `HandCameraController` on the player object. Set its child camera as **Pitch Pivot**. Add a `CharacterController` for collisions.
 - `HandCursor` anywhere, with **Target Camera** set.
 - `HandInteractable` plus a Collider on anything touchable. Wire your animations and sounds into `onHoverEnter`, `onSelect` and the other events in the Inspector.

@@ -32,6 +32,7 @@ namespace LittlePrince.Story.EditorTools
             {
                 root.AddComponent<HandTrackingReceiver>();
                 root.AddComponent<HandDebugVisualizer>();
+                root.AddComponent<PythonLauncher>();
             }
 
             // ---- Stage roots, start points and destination areas ------------------------

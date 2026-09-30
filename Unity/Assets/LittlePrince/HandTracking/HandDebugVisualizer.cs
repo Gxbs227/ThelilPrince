@@ -50,7 +50,7 @@ namespace LittlePrince.HandTracking
                 string status = r.IsConnected
                     ? $"<color=#9dffa0>● MediaPipe connected</color>  {r.PacketsPerSecond:0} pkt/s"
                     : r.IsSimulating
-                        ? "<color=#ffd27f>● Mouse simulation</color> (start unity_sender.py)"
+                        ? "<color=#ffd27f>● Mouse simulation</color> " + LauncherStatus()
                         : $"<color=#ff8080>● Waiting for data on UDP {r.port}</color>";
                 GUILayout.Label(status, _label);
 
@@ -85,6 +85,15 @@ namespace LittlePrince.HandTracking
                 }
             }
             GUI.color = Color.white;
+        }
+
+        PythonLauncher _launcher;
+        bool _searchedLauncher;
+
+        string LauncherStatus()
+        {
+            if (!_searchedLauncher) { _launcher = FindObjectOfType<PythonLauncher>(); _searchedLauncher = true; }
+            return _launcher != null ? $"(Python: {_launcher.Status})" : "(start unity_sender.py)";
         }
 
         static Vector2 ToPreview(Rect area, Vector3 viewport) =>
