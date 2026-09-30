@@ -42,6 +42,7 @@ namespace LittlePrince.HandTracking
         public bool IsRunning => _process != null && !_process.HasExited;
 
         Process _process;
+        string _folder;
         readonly StringBuilder _errors = new StringBuilder();
 
         IEnumerator Start()
@@ -83,6 +84,7 @@ namespace LittlePrince.HandTracking
                                  "the thousands of files in its .venv, which makes the Editor slow and can cause errors. " +
                                  "Move it next to Assets/ (into the project folder) and recreate the .venv there.");
 
+            _folder = folder;
             string python = FindPythonExecutable(folder);
             var args = new StringBuilder($"-u \"{ScriptName}\" --port {port} --hands {hands}");
             if (cameraIndex >= 0) args.Append($" --camera {cameraIndex}");
@@ -142,7 +144,19 @@ namespace LittlePrince.HandTracking
             lock (_errors) err = _errors.ToString().Trim();
             Status = $"Python stopped (exit code {_process.ExitCode})";
             if (_process.ExitCode != 0)
-                Debug.LogError($"[Python] unity_sender.py stopped with an error (exit code {_process.ExitCode}):\n{Tail(err, 25)}");
+            {
+                string hint = err.Contains("ModuleNotFoundError") || err.Contains("No module named")
+                    ? "\n\nPython libraries are missing. Once, in a terminal (cmd):\n" +
+                      $"  cd /d \"{_folder}\"\n" +
+                      (File.Exists(Path.Combine(_folder ?? "", ".venv", "Scripts", "python.exe")) ||
+                       File.Exists(Path.Combine(_folder ?? "", ".venv", "bin", "python3"))
+                          ? ""
+                          : "  python -m venv .venv\n") +
+                      "  .venv\\Scripts\\python.exe -m pip install -r requirements.txt\n" +
+                      "Then press Play again."
+                    : "";
+                Debug.LogError($"[Python] unity_sender.py stopped with an error (exit code {_process.ExitCode}):\n{Tail(err, 25)}{hint}");
+            }
             else
                 Debug.Log("[Python] unity_sender.py closed.");
             _process.Dispose();
