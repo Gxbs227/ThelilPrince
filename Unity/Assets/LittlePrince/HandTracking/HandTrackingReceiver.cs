@@ -79,6 +79,7 @@ namespace LittlePrince.HandTracking
         string _latestJson;
         int _packetCounter;
         float _lastPacketTime = -10f, _ppsTimer;
+        bool _warnedNoData;
         int _ppsCount;
 
         void Awake()
@@ -169,6 +170,17 @@ namespace LittlePrince.HandTracking
                 _lastPacketTime = Time.unscaledTime;
                 if (_simHand != null) RemoveHand(_simHand); // real data takes over from the mouse
                 ProcessPacket(json);
+            }
+
+            if (!_warnedNoData && _lastPacketTime < 0f && Time.timeSinceLevelLoad > 4f)
+            {
+                _warnedNoData = true;
+                bool hasLauncher = GetComponent<PythonLauncher>() != null || FindObjectOfType<PythonLauncher>() != null;
+                Debug.LogWarning(hasLauncher
+                    ? "[HandTracking] No hand data yet. Check the [Python] messages above for what went wrong."
+                    : "[HandTracking] No hand data yet, and nothing starts Python in this scene. " +
+                      "Use the menu  Little Prince > Add Python Launcher to Scene  (starts it on Play), " +
+                      "or run  python unity_sender.py  in the HandTracking-Python folder.");
             }
 
             IsSimulating = simulateWithMouse && !IsConnected;

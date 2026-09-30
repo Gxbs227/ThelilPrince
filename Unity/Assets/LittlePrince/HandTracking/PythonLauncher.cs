@@ -46,7 +46,12 @@ namespace LittlePrince.HandTracking
 
         IEnumerator Start()
         {
-            if (!launchOnPlay || (!Application.isEditor && !launchInBuilds)) { Status = "disabled"; yield break; }
+            if (!launchOnPlay || (!Application.isEditor && !launchInBuilds))
+            {
+                Status = "disabled";
+                Debug.Log("[Python] PythonLauncher is disabled (Launch On Play is off), not starting Python.");
+                yield break;
+            }
 
             // If Python is already running (started by hand), don't start a second one.
             yield return new WaitForSecondsRealtime(0.6f);
