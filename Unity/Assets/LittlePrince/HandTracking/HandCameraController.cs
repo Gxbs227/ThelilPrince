@@ -12,6 +12,7 @@ namespace LittlePrince.HandTracking
     ///   Point                -> stand still, turn slowly (aiming)
     ///   Pinch                -> stand still, view frozen (grabbing)
     ///   No hand              -> glide to a stop
+    ///   Story gesture active -> glide to a stop (see holdStillDuringStoryGestures)
     ///
     /// Put this on the "Player" object. The camera can be a child (assign it to
     /// <see cref="pitchPivot"/>) or on the same object. A CharacterController is
@@ -36,6 +37,10 @@ namespace LittlePrince.HandTracking
         [Range(0f, 0.4f), Tooltip("Radius around the screen centre where the hand does nothing.")]
         public float deadZone = 0.12f;
         public float lookSmoothing = 4f;
+
+        [Header("Story gestures")]
+        [Tooltip("Stand still and stop turning while a story gesture (wave, swipe, run...) is happening, so e.g. an open-palm wave doesn't also walk and turn the camera.")]
+        public bool holdStillDuringStoryGestures = true;
 
         [Header("Limits")]
         [Tooltip("0 = unlimited. Keeps the visitor inside the stage.")]
@@ -69,7 +74,8 @@ namespace LittlePrince.HandTracking
             var receiver = HandTrackingReceiver.Instance;
             var hand = receiver != null ? receiver.PrimaryHand : null;
 
-            if (InputEnabled && hand != null)
+            bool storyGesture = holdStillDuringStoryGestures && hand != null && hand.StoryGestures.Count > 0;
+            if (InputEnabled && hand != null && !storyGesture)
             {
                 Vector2 offset = hand.Palm - new Vector2(0.5f, 0.5f); // -0.5..0.5
                 float x = ApplyDeadZone(offset.x);

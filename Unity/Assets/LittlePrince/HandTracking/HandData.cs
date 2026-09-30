@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace LittlePrince.HandTracking
@@ -13,6 +14,7 @@ namespace LittlePrince.HandTracking
         public float score;
         public string gesture;  // open | fist | pinch | point | none
         public float pinch;     // 0..1
+        public string[] events; // story gestures from gestures.py active right now, e.g. "WAVE_CALM"
         public float[] lm;      // 21 * (x, y, z), image coords, origin top-left
     }
 
@@ -51,6 +53,8 @@ namespace LittlePrince.HandTracking
         public bool IsPinching;
         /// <summary>x/y viewport, z = MediaPipe relative depth (smaller = closer to camera).</summary>
         public readonly Vector3[] Landmarks = new Vector3[LandmarkCount];
+        /// <summary>Story gestures (labels from gestures.py) active right now, e.g. "SWIPE", "WAVE_CALM".</summary>
+        public readonly HashSet<string> StoryGestures = new HashSet<string>();
 
         /// <summary>Centre of the palm, smoothed. Best for steering the camera.</summary>
         public Vector2 Palm;
@@ -110,6 +114,19 @@ namespace LittlePrince.HandTracking
             // Hysteresis: start pinching at 0.8, release below 0.55.
             IsPinching = IsPinching ? PinchStrength > 0.55f : (PinchStrength > 0.8f || Gesture == HandGesture.Pinch);
             LastSeenTime = Time.unscaledTime;
+        }
+
+        /// <summary>Replaces the active story gestures and reports which ones started / ended.</summary>
+        public void SetStoryGestures(string[] labels, List<string> started, List<string> ended)
+        {
+            ended.Clear();
+            started.Clear();
+            foreach (var label in StoryGestures)
+                if (labels == null || Array.IndexOf(labels, label) < 0) ended.Add(label);
+            foreach (var label in ended) StoryGestures.Remove(label);
+            if (labels == null) return;
+            foreach (var label in labels)
+                if (!string.IsNullOrEmpty(label) && StoryGestures.Add(label)) started.Add(label);
         }
 
         /// <summary>Used by the mouse simulator in the receiver.</summary>

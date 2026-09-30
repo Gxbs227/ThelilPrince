@@ -4,7 +4,7 @@ namespace LittlePrince.HandTracking.Demo
 {
     /// <summary>
     /// Test-scene flower: a closed bud that blooms (grows + changes colour)
-    /// when the visitor pinches it. Pinch again to close it.
+    /// when the visitor pinches it (or when a StoryGestureTrigger calls Toggle).
     /// Shows how to react to <see cref="HandInteractable"/> from code.
     /// </summary>
     [RequireComponent(typeof(HandInteractable))]
@@ -15,6 +15,8 @@ namespace LittlePrince.HandTracking.Demo
         public Color bloomColor = new Color(1f, 0.55f, 0.6f);
         public float bloomScale = 1.8f;
         public float speed = 3f;
+        [Tooltip("Bloom when pinched. Turn off to open it only via a StoryGestureTrigger.")]
+        public bool toggleOnSelect = true;
 
         bool _bloomed;
         float _t;
@@ -23,12 +25,12 @@ namespace LittlePrince.HandTracking.Demo
 
         void Awake()
         {
-            GetComponent<HandInteractable>().onSelect.AddListener(Toggle);
+            if (toggleOnSelect) GetComponent<HandInteractable>().onSelect.AddListener(Toggle);
             if (head != null) _headBaseScale = head.transform.localScale;
             _mpb = new MaterialPropertyBlock();
         }
 
-        void Toggle()
+        public void Toggle()
         {
             _bloomed = !_bloomed;
             Debug.Log($"[HandTracking demo] {name} {(_bloomed ? "bloomed" : "closed")}");

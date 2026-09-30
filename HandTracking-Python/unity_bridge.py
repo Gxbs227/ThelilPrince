@@ -1,84 +1,58 @@
 """
-Dependency-free helpers shared by hand_tracker.py and mock_sender.py:
-gesture classification + the UDP packet sender Unity listens to.
+unity_bridge.py
 
-If you already have your own MediaPipe loop, just copy this file and do:
+Turns one hand's landmarks (+ the story gestures from gestures.py) into the
+small JSON packet Unity's HandTrackingReceiver listens for, and sends it over UDP.
 
-    sender = UnityHandSender("127.0.0.1", 5052)
-    hands = [build_hand_packet([(p.x, p.y, p.z) for p in lms], "Right", score), ...]
-    sender.send(hands)          # once per frame, send [] when no hand is visible
+Packet format (must match HandData.cs in Unity):
+{
+  "t": 1712345678.12, "frame": 123,
+  "hands": [
+    {
+      "side": "Right",                  # MediaPipe handedness label
+      "score": 1.0,
+      "gesture": "open",                # basic pose: open | fist | pinch | point | none
+      "pinch": 0.85,                    # 0..1 how closed thumb+index are
+      "events": ["WAVE_CALM"],          # story gestures from gestures.py active right now
+      "lm": [x0, y0, z0, ... x20, y20, z20]   # 21 landmarks, normalised, origin top-left
+    }
+  ]
+}
+An empty "hands" list means no hand is visible.
 """
-
 import json
-import math
 import socket
 import time
 
-# Landmark indices (same for every MediaPipe hand model)
-WRIST = 0
-THUMB_TIP = 4
-INDEX_MCP, INDEX_PIP, INDEX_TIP = 5, 6, 8
-MIDDLE_MCP, MIDDLE_PIP, MIDDLE_TIP = 9, 10, 12
-RING_PIP, RING_TIP = 14, 16
-PINKY_PIP, PINKY_TIP = 18, 20
+from gesture_utils import FingerState, MotionTracker
+from gestures import ALL_GESTURES
 
-HAND_CONNECTIONS = [
-    (0, 1), (1, 2), (2, 3), (3, 4),
-    (0, 5), (5, 6), (6, 7), (7, 8),
-    (5, 9), (9, 10), (10, 11), (11, 12),
-    (9, 13), (13, 14), (14, 15), (15, 16),
-    (13, 17), (0, 17), (17, 18), (18, 19), (19, 20),
-]
+PINCH_THRESHOLD = 0.35  # same value gestures.py uses
 
 
-# --------------------------------------------------------------------------
-# Gesture classification
-# --------------------------------------------------------------------------
-def _dist(a, b):
-    return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
-
-
-def classify_gesture(lm):
-    """lm: list of 21 (x, y, z) tuples. Returns (gesture, pinch_strength)."""
-    wrist = lm[WRIST]
-    hand_size = max(_dist(wrist, lm[MIDDLE_MCP]), 1e-6)
-
-    # A finger is "extended" when its tip is clearly further from the wrist
-    # than its middle joint. Distance-based, so it works at any hand rotation.
-    def extended(tip, pip):
-        return _dist(wrist, lm[tip]) > _dist(wrist, lm[pip]) * 1.15
-
-    fingers = [
-        extended(INDEX_TIP, INDEX_PIP),
-        extended(MIDDLE_TIP, MIDDLE_PIP),
-        extended(RING_TIP, RING_PIP),
-        extended(PINKY_TIP, PINKY_PIP),
-    ]
-
-    pinch_dist = _dist(lm[THUMB_TIP], lm[INDEX_TIP]) / hand_size
+def basic_gesture(fs: FingerState):
+    """Simple always-on pose used by Unity for walking / pointing / grabbing."""
+    pinch_dist = fs.pinch_distance()
     # 0.25 (touching) -> 1.0, 0.8 (wide apart) -> 0.0
     pinch = max(0.0, min(1.0, (0.8 - pinch_dist) / (0.8 - 0.25)))
 
-    # In a fist the thumb also rests on the index, so check "fist" before "pinch":
-    # all fingers curled AND the index tip tucked in near the palm.
-    index_to_palm = _dist(lm[INDEX_TIP], lm[MIDDLE_MCP]) / hand_size
-
-    if not any(fingers) and index_to_palm < 0.6:
+    if fs.is_fist:  # checked before pinch: in a fist the thumb also rests on the index
         gesture = "fist"
-    elif pinch_dist < 0.35:
+    elif pinch_dist < PINCH_THRESHOLD:
         gesture = "pinch"
-    elif all(fingers):
+    elif fs.is_open_palm:
         gesture = "open"
-    elif fingers[0] and not any(fingers[1:]):
+    elif fs.is_pointing:
         gesture = "point"
     else:
         gesture = "none"
     return gesture, pinch
 
 
-def build_hand_packet(landmarks, side, score):
+def build_hand_packet(landmarks, side, score=1.0, events=(), finger_state=None):
     """landmarks: 21 (x, y, z) tuples in normalised image coordinates."""
-    gesture, pinch = classify_gesture(landmarks)
+    fs = finger_state or FingerState(landmarks)
+    gesture, pinch = basic_gesture(fs)
     flat = []
     for x, y, z in landmarks:
         flat.extend((round(x, 4), round(y, 4), round(z, 4)))
@@ -87,6 +61,7 @@ def build_hand_packet(landmarks, side, score):
         "score": round(float(score), 3),
         "gesture": gesture,
         "pinch": round(pinch, 3),
+        "events": list(events),
         "lm": flat,
     }
 
@@ -101,3 +76,33 @@ class UnityHandSender:
         self.frame += 1
         msg = {"t": round(time.time(), 3), "frame": self.frame, "hands": hands}
         self.sock.sendto(json.dumps(msg, separators=(",", ":")).encode("utf-8"), self.addr)
+
+
+# One-frame gestures (e.g. TOUCH) are held "active" at least this long, so Unity
+# never misses them even if it drops a packet or runs slower than the webcam.
+MIN_EVENT_SECONDS = 0.3
+# Forget a hand's detector state if it has been out of view this long.
+FORGET_AFTER_SECONDS = 1.0
+
+
+class HandState:
+    """Motion history + one instance of every detector, for one hand (Left or Right)."""
+
+    def __init__(self):
+        self.motion = MotionTracker(history_len=20)
+        self.detectors = [cls() for _name, cls in ALL_GESTURES.values()]
+        self.active_until = {}  # label -> time it stays active until
+        self.printed = set()    # labels already printed to the console
+        self.last_seen = time.time()
+
+    def update(self, landmarks):
+        now = time.time()
+        self.last_seen = now
+        fs = FingerState(landmarks)
+        self.motion.update(landmarks, now)
+        for detector in self.detectors:
+            result = detector.update(fs, self.motion)
+            if result["active"]:
+                self.active_until[result["label"]] = now + MIN_EVENT_SECONDS
+        self.active_until = {k: t for k, t in self.active_until.items() if t >= now}
+        return fs, sorted(self.active_until)

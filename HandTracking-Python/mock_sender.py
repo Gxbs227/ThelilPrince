@@ -1,20 +1,20 @@
 """
-Fake hand data for testing the Unity side WITHOUT a webcam or MediaPipe.
+Fake hand for testing the Unity side WITHOUT a webcam or MediaPipe.
 
-A synthetic hand drifts slowly in a circle and cycles through the gestures
-(open -> point -> pinch -> fist) every few seconds, using exactly the same
-packet format as hand_tracker.py.
+A synthetic hand acts out a short loop of movements (drift, wave, point left/right,
+pinch-and-hold, fist, swipe) and runs through the REAL detectors from gestures.py,
+so Unity receives exactly what unity_sender.py would send, story gestures included.
 
 Run:
     python mock_sender.py            # -> 127.0.0.1:5052
-    python mock_sender.py --port 5052 --host 192.168.0.20
+    python mock_sender.py --host 192.168.0.20 --port 5052
 """
 
 import argparse
 import math
 import time
 
-from unity_bridge import UnityHandSender, build_hand_packet
+from unity_bridge import HandState, UnityHandSender, build_hand_packet
 
 # A rough open right hand in normalised image coords, centred on (0, 0), wrist at the bottom.
 OPEN_HAND = [
@@ -40,10 +40,22 @@ def pose(gesture):
             curl(name)
         if gesture == "fist":
             curl("index")
+            pts[3] = [-0.03, 0.04]
             pts[4] = [-0.02, 0.03]
     if gesture == "pinch":
         pts[4] = [pts[8][0] + 0.005, pts[8][1] + 0.005]
     return pts
+
+
+# (name, seconds, pose, function t -> (x, y) centre of the hand)
+SCRIPT = [
+    ("drift",          4.0, "open",  lambda t: (0.5 + 0.2 * math.cos(t * 0.8), 0.5 + 0.1 * math.sin(t * 1.6))),
+    ("wave",           3.0, "open",  lambda t: (0.5 + 0.12 * math.sin(t * 9.0), 0.45)),
+    ("point L/R",      3.0, "point", lambda t: (0.35 if int(t / 0.6) % 2 == 0 else 0.65, 0.5)),
+    ("pinch and hold", 3.0, "pinch", lambda t: (0.5, 0.5)),
+    ("fist",           2.0, "fist",  lambda t: (0.5, 0.55)),
+    ("swipe",          1.5, "open",  lambda t: (0.15 + min(t, 0.4) / 0.4 * 0.7, 0.5)),
+]
 
 
 def main():
@@ -54,21 +66,30 @@ def main():
     args = ap.parse_args()
 
     sender = UnityHandSender(args.host, args.port)
-    cycle = ["open", "open", "point", "pinch", "open", "fist"]
+    state = HandState()
     print(f"Sending mock hand to udp://{args.host}:{args.port}  (Ctrl+C to stop)")
+    total = sum(s[1] for s in SCRIPT)
     start = time.time()
-    last = None
+    last_step, last_events = None, []
     try:
         while True:
-            t = time.time() - start
-            gesture = cycle[int(t / 2.5) % len(cycle)]
-            cx = 0.5 + 0.25 * math.cos(t * 0.4)
-            cy = 0.5 + 0.15 * math.sin(t * 0.8)
+            t = (time.time() - start) % total
+            for name, seconds, gesture, path in SCRIPT:
+                if t < seconds:
+                    break
+                t -= seconds
+            if name != last_step:
+                print(f"- {name}")
+                last_step = name
+
+            cx, cy = path(t)
             lm = [(cx + x, cy + y, 0.0) for x, y in pose(gesture)]
-            packet = build_hand_packet(lm, "Right", 0.99)
-            if packet["gesture"] != last:
-                print(f"  gesture: {packet['gesture']}")
-                last = packet["gesture"]
+            fs, events = state.update(lm)
+            packet = build_hand_packet(lm, "Right", 1.0, events, fs)
+            new = [e for e in events if e not in last_events]
+            if new:
+                print(f"    story gesture: {', '.join(new)}   (basic pose: {packet['gesture']})")
+            last_events = events
             sender.send([packet])
             time.sleep(1.0 / args.fps)
     except KeyboardInterrupt:

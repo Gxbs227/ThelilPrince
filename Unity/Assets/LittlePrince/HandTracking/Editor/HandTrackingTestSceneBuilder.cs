@@ -1,6 +1,7 @@
 using System.IO;
 using LittlePrince.HandTracking.Demo;
 using UnityEditor;
+using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -102,10 +103,21 @@ namespace LittlePrince.HandTracking.EditorTools
             var rose = CreateFlower("The Rose", Vector3.zero, stemMat, headMat, new Color(0.95f, 0.25f, 0.35f));
             rose.transform.localScale = Vector3.one * 1.4f;
 
+            // Story gesture example: pinch and hold still while pointing at the rose
+            // (PICK_AND_LOOK from gestures.py) makes it bloom. Normal pinch-to-select is
+            // turned off on the rose so only the story gesture opens it.
+            var roseFlower = rose.GetComponent<DemoFlower>();
+            roseFlower.toggleOnSelect = false;
+            var story = rose.AddComponent<StoryGestureTrigger>();
+            story.gesture = StoryGesture.PickAndLook;
+            story.requireHover = true;
+            story.hoverTarget = rose.GetComponent<HandInteractable>();
+            UnityEventTools.AddPersistentListener(story.onDetected, roseFlower.Toggle);
+
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.Refresh();
             Selection.activeGameObject = tracking;
-            Debug.Log($"[HandTracking] Test scene created at {ScenePath}. Press Play, then run hand_tracker.py (or use the mouse).");
+            Debug.Log($"[HandTracking] Test scene created at {ScenePath}. Press Play, then run unity_sender.py or mock_sender.py (or use the mouse).");
         }
 
         static GameObject CreateFlower(string name, Vector3 pos, Material stemMat, Material headMat, Color bloom)

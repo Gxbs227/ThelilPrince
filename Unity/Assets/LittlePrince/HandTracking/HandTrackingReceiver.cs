@@ -9,7 +9,7 @@ using UnityEngine;
 namespace LittlePrince.HandTracking
 {
     /// <summary>
-    /// Listens for hand packets from HandTracking-Python/hand_tracker.py (UDP, JSON)
+    /// Listens for hand packets from HandTracking-Python/unity_sender.py (UDP, JSON)
     /// and exposes smoothed hands + events to the rest of the experience.
     ///
     /// Put ONE of these in the scene. Other scripts use HandTrackingReceiver.Instance.
@@ -20,13 +20,13 @@ namespace LittlePrince.HandTracking
         public static HandTrackingReceiver Instance { get; private set; }
 
         [Header("Network")]
-        [Tooltip("Must match --port in hand_tracker.py")]
+        [Tooltip("Must match --port in unity_sender.py")]
         public int port = 5052;
         [Tooltip("Hand is considered lost if no packet mentions it for this long (seconds).")]
         public float lostTimeout = 0.4f;
 
         [Header("Data")]
-        [Tooltip("hand_tracker.py already mirrors the webcam. Only tick this if you run it with --no-mirror.")]
+        [Tooltip("unity_sender.py already mirrors the webcam. Only tick this if you run it with --no-mirror.")]
         public bool mirrorX = false;
         [Range(0f, 0.95f), Tooltip("0 = raw/jittery, 0.9 = very smooth but laggy")]
         public float smoothing = 0.6f;
@@ -48,6 +48,9 @@ namespace LittlePrince.HandTracking
         public event Action<TrackedHand> PinchStarted;
         public event Action<TrackedHand> PinchEnded;
         public event Action<TrackedHand, Vector2> Swiped;                // direction: left/right/up/down
+        /// <summary>A story gesture from gestures.py started, e.g. "WAVE_CALM", "SWIPE", "TOUCH".</summary>
+        public event Action<TrackedHand, string> StoryGestureStarted;
+        public event Action<TrackedHand, string> StoryGestureEnded;
 
         // ---- State --------------------------------------------------------------
         public IReadOnlyList<TrackedHand> Hands => _hands;
@@ -64,6 +67,7 @@ namespace LittlePrince.HandTracking
         readonly Dictionary<string, TrackedHand> _bySide = new Dictionary<string, TrackedHand>();
         readonly Dictionary<TrackedHand, bool> _wasPinching = new Dictionary<TrackedHand, bool>();
         readonly HashSet<string> _seenThisPacket = new HashSet<string>();
+        readonly List<string> _started = new List<string>(), _ended = new List<string>();
         float _lastSwipeTime;
         TrackedHand _simHand;
 
@@ -208,7 +212,23 @@ namespace LittlePrince.HandTracking
                 hand.Apply(p, mirrorX, smoothing, dt);
                 if (isNew) HandFound?.Invoke(hand);
                 if (hand.Gesture != before) GestureChanged?.Invoke(hand, hand.Gesture);
+
+                hand.SetStoryGestures(p.events, _started, _ended);
+                foreach (var label in _ended) StoryGestureEnded?.Invoke(hand, label);
+                foreach (var label in _started) StoryGestureStarted?.Invoke(hand, label);
             }
+        }
+
+        /// <summary>
+        /// Fires a story gesture on the primary hand as if gestures.py had detected it.
+        /// For testing stage logic without a camera (see StoryGestureTrigger's context menu).
+        /// </summary>
+        public void SimulateStoryGesture(string label)
+        {
+            var hand = PrimaryHand;
+            if (hand == null) { Debug.LogWarning("[HandTracking] No hand to simulate a story gesture on."); return; }
+            StoryGestureStarted?.Invoke(hand, label);
+            StoryGestureEnded?.Invoke(hand, label);
         }
 
         void Simulate()
@@ -236,6 +256,8 @@ namespace LittlePrince.HandTracking
             _hands.Remove(hand);
             if (_bySide.TryGetValue(hand.Side, out var h) && h == hand) _bySide.Remove(hand.Side);
             if (_wasPinching.TryGetValue(hand, out bool pinching) && pinching) PinchEnded?.Invoke(hand);
+            hand.SetStoryGestures(null, _started, _ended);
+            foreach (var label in _ended) StoryGestureEnded?.Invoke(hand, label);
             _wasPinching.Remove(hand);
             if (hand == _simHand) _simHand = null;
             HandLost?.Invoke(hand);

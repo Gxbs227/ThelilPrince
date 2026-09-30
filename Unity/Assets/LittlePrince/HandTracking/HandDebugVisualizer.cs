@@ -50,7 +50,7 @@ namespace LittlePrince.HandTracking
                 string status = r.IsConnected
                     ? $"<color=#9dffa0>● MediaPipe connected</color>  {r.PacketsPerSecond:0} pkt/s"
                     : r.IsSimulating
-                        ? "<color=#ffd27f>● Mouse simulation</color> (start hand_tracker.py)"
+                        ? "<color=#ffd27f>● Mouse simulation</color> (start unity_sender.py)"
                         : $"<color=#ff8080>● Waiting for data on UDP {r.port}</color>";
                 GUILayout.Label(status, _label);
 
@@ -58,7 +58,9 @@ namespace LittlePrince.HandTracking
                 GUILayout.Label(h == null
                     ? "Hand: none"
                     : $"Hand: {h.Side}   gesture: <b>{h.Gesture}</b>   pinch: {h.PinchStrength:0.00}{(h.IsPinching ? "  PINCHING" : "")}", _label);
-                GUILayout.Label(h == null ? "" : $"Palm: ({h.Palm.x:0.00}, {h.Palm.y:0.00})   size: {h.Size:0.00}", _label);
+                GUILayout.Label(h == null ? "" : h.StoryGestures.Count > 0
+                    ? $"Story: <color=#9dffa0><b>{string.Join("  ", h.StoryGestures)}</b></color>"
+                    : $"Palm: ({h.Palm.x:0.00}, {h.Palm.y:0.00})   size: {h.Size:0.00}", _label);
                 GUILayout.Label($"<size=11>Hands: {r.Hands.Count}   F1 hide   {(string.IsNullOrEmpty(r.LastError) ? "" : "err: " + r.LastError)}</size>", _label);
             }
             GUILayout.EndArea();
