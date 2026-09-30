@@ -7,6 +7,10 @@ Three stages (garden → village → outer space), 5–8 minutes, looping back t
 
 ---
 
+## Project structure and teamwork
+
+The Unity project is the `Unity/` folder. Stages are split into one scene each (`Main` plus `01_Desert` … `05_Final`), with one owner per scene. Folders exist for models, characters, textures, audio, UI and cinematics. **Read [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) before adding assets**: it has the folder map, who edits what, and the one-time Git and Unity setup.
+
 ## Hand tracking: MediaPipe → Unity
 
 ```
@@ -61,8 +65,8 @@ Each hand is sent with:
 
 ### 2. Unity side
 
-1. Copy the folder `Unity/Assets/LittlePrince` into the `Assets/` folder of your Unity project. The scripts were compile-checked against Unity 2021.3 and work with the Built-in pipeline, URP and HDRP, and with either the old or new Input System.
-2. In the Unity menu choose **Little Prince → Create Hand Tracking Test Scene**. This creates `Assets/LittlePrince/Scenes/HandTrackingTest.unity`: a pastel garden with pinchable flowers and a rose.
+1. Open the repo's `Unity/` folder as the Unity project (see [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md)). Alternatively, copy `Unity/Assets/LittlePrince` **together with its `.meta` files** into your project's `Assets/`. The scripts were compile-checked against Unity 2021.3 and work with the Built-in pipeline, URP and HDRP, and with either the old or new Input System.
+2. In the Unity menu choose **Little Prince → Create Hand Tracking Test Scene**. This creates `Assets/LittlePrince/Scenes/Sandbox/HandTrackingTest.unity`: a pastel garden with pinchable flowers and a rose.
 3. Press **Play**, then start `unity_sender.py` (or `mock_sender.py`).
 4. The top-left overlay (toggle with **F1**) should turn green (**● MediaPipe connected**) and show the pose, the active story gestures and a live hand skeleton.
 5. Pinch a flower to make it bloom. The rose only blooms with the story gesture **pinch and hold still** (`PICK_AND_LOOK`) while you point at it.
@@ -141,7 +145,7 @@ To keep the experience free of pressure, the visitor doesn't have to steer. `Gui
 
 ### Story flow (from the flowchart)
 
-[`docs/Experience_Flow_Chart.pdf`](docs/Experience_Flow_Chart.pdf) is implemented by `StoryFlowManager` (`Unity/Assets/LittlePrince/Story/`). In any scene choose **Little Prince → Add Story Flow (from flowchart)**. It adds all 18 steps below, plus these placeholders for your real environments:
+[`docs/Experience_Flow_Chart.pdf`](docs/Experience_Flow_Chart.pdf) is implemented by `StoryFlowManager` (`Unity/Assets/LittlePrince/Scripts/Story/`). In any scene choose **Little Prince → Add Story Flow (from flowchart)**. It adds all 18 steps below, plus these placeholders for your real environments:
 - a **Stage - Intro / Garden / Village / Space / Final** object for each stage; put each environment under its object, and only the current stage is shown;
 - **Player Start** points;
 - **Area** triggers for the gate and the cliff.
