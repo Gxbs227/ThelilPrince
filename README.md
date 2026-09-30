@@ -108,6 +108,50 @@ Story gestures (from `gestures.py`, selectable in `StoryGestureTrigger`):
 
 Speeds, dead zone and smoothing can be changed in the Inspector. The defaults are deliberately slow and floaty to match the relaxed, no-pressure tone.
 
+### Story flow (from the flowchart)
+
+[`docs/Experience_Flow_Chart.pdf`](docs/Experience_Flow_Chart.pdf) is implemented by `StoryFlowManager` (`Unity/Assets/LittlePrince/Story/`). In any scene choose **Little Prince → Add Story Flow (from flowchart)**. It adds all 18 steps below, plus these placeholders for your real environments:
+- a **Stage - Intro / Garden / Village / Space / Final** object for each stage; put each environment under its object, and only the current stage is shown;
+- **Player Start** points;
+- **Area** triggers for the gate and the cliff.
+
+| # | Stage | Step | Completes when |
+|---|---|---|---|
+| 1 | Intro | Black space | 4 s |
+| 2 | Intro | Sky becomes full of stars | `CLASP_OPEN_UPWARD` |
+| 3 | Intro | Follow the footprints in the desert | `POINT_ALTERNATE_LR` (another gesture shows *"Try again"*) |
+| 4 | Intro | Get to the gate for stage 1 | player walks into *Area - Gate* |
+| 5 | Garden | Interact with the roses that light up | `PICK_FORWARD` ×3 |
+| 6 | Garden | Lead to the cliff for second stage | player walks into *Area - Cliff* |
+| 7 | Village | Interaction with some children | `WAVE_RAPID` |
+| 8 | Village | Navigate through the village to train station | `CLASP_SWING_RUN` |
+| 9 | Village | Interaction with the switchman | `WAVE_CALM` or `PAT_SHOULDER` |
+| 10 | Village | Walk to the bush and interact with the fox | `SWIPE` |
+| 11 | Village | Take the piece of paper from the fox | `PICK_AND_LOOK` |
+| 12 | Village | Fold the paper into origami birds | `FOLD_PAPER` |
+| 13 | Village | Fly to the third stage | 6 s animation |
+| 14 | Space | Going through the different planets | 10 s animation |
+| 15 | Space | Touch the stars that light up | `POINT_UP` ×3 |
+| 16 | Space | Follow the sound and interact with the rose | `CLASP_SWING_RUN` |
+| 17 | Final | Third person view of the rose, character and sunset | video ends (or 15 s) |
+| 18 | Final | Quote: *"Don't think too much, eventually you will find a way."* | 10 s, then **back to the start** |
+
+Each step has the following settings in the Inspector:
+- **Events** (UnityEvents) for your animations, sounds and UI:
+  - `onEnter`: the step starts;
+  - `onProgress`: one repetition done, e.g. one rose lit;
+  - `onHint`: the gentle hint appears;
+  - `onIncorrect`: a different gesture was made;
+  - `onComplete`: the step is done.
+- **Pacing:**
+  - a gentle hint text appears after 12 s;
+  - gesture and area steps **move on by themselves** after 45–60 s. Nobody gets stuck, because there's no winning or losing.
+- **Allow Walking:** whether the camera can move during the step.
+- **Teleport Player To:** where the player is placed when the step starts.
+- **Must Point At:** the cursor has to be on a given object during the gesture.
+
+For testing, press **N** to skip a step and **F2** to hide the step overlay. You can also right-click the component and choose **Skip current step**. From code, listen to `StepStarted`, `StageChanged`, `HintChanged` and `Looped`, or call `CompleteCurrentStep()` for `Manual` steps.
+
 ### Scripting hooks for the stages
 
 ```csharp

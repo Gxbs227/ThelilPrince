@@ -83,5 +83,31 @@ namespace LittlePrince.HandTracking
 #endif
             }
         }
+
+        /// <summary>N: skip the current story step.</summary>
+        public static bool SkipPressed
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                return Keyboard.current != null && Keyboard.current.nKey.wasPressedThisFrame;
+#else
+                return Input.GetKeyDown(KeyCode.N);
+#endif
+            }
+        }
+
+        /// <summary>F2: toggle the story step overlay.</summary>
+        public static bool ToggleStoryOverlayPressed
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                return Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame;
+#else
+                return Input.GetKeyDown(KeyCode.F2);
+#endif
+            }
+        }
     }
 }
