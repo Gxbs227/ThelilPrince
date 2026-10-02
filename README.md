@@ -200,6 +200,19 @@ HandInteractable.AnySelected += obj => { /* count interactions to move to the ne
 player.GetComponent<HandCameraController>().InputEnabled = false;
 ```
 
+### Stage 2: village and the fox's hide and seek
+
+Open `Scenes/Stages/03_Village.unity` and use **Little Prince → Stage 2 - Village → Build Village Layout**. It lays out the stage sketch with placeholder shapes (houses, 4 children, trees, the fox, the bush, the paper and the origami birds), plus the guided path and its stops:
+
+| Where | What the visitor does | Script |
+|---|---|---|
+| 4 children | Wave (`WAVE_RAPID` or `WAVE_CALM`) | `GestureStop` |
+| Through the village | Swing a closed hand to run faster (`CLASP_SWING_RUN`, optional) | `RunGestureBoost` (on the Player) |
+| 3 hiding spots in the trees | The fox peeks out; look around with the hand and point at it (or pinch it) | `FoxHideAndSeek` |
+| Meeting the fox | Swipe the bush, take the paper (`PICK_AND_LOOK`), fold it (`FOLD_PAPER`), and the birds fly off | `GestureStop` with 3 steps |
+
+Every stop also walks on by itself after its **Max Wait Seconds**, so nobody gets stuck. Move the waypoints, children and hiding spots onto your real models. Each hiding spot is where the fox peeks, facing the visitor, and the orange gizmo shows where it hides. Then swap the placeholders for the real models and hook animations into the **On Done**, **On Peek** and **On Found** events. If the scene has no hand tracking yet, the menu also adds a **TEST RIG** (player, camera, hand tracking) so you can press Play right away. Delete the rig once the Main scene drives the stage. Without a camera, use the mouse as the hand, or right-click **GestureStop → Test: do the current gesture** or **FoxHideAndSeek → Test: find the fox now**.
+
 ### Troubleshooting
 
 - **The overlay stays red or yellow while Python is running:** check that both sides use the same port. Only one app can listen on a port, so close any second Unity instance. If Unity runs on another computer, pass `--host <that computer's IP>` and allow UDP 5052 through its firewall.
