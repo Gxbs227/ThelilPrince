@@ -209,22 +209,44 @@ class ClaspSwingDetector:
 
 
 class SwipeDetector:
-    """Stage 2, gesture 4: a single fast lateral swipe (checking the bush)."""
+    """
+    Stage 2, gesture 4: one lateral sweep of the hand (pushing the bush aside).
 
-    def __init__(self, min_speed=0.8):
-        self.min_speed = min_speed  # TUNE ME: normalized units/sec
+    Looks only at the last `max_seconds`: the wrist must travel `min_distance`
+    sideways (normalized image width) in ONE direction, without coming back
+    (that would be a wave) and without moving more up/down than sideways.
+    """
+
+    def __init__(self, min_distance=0.15, max_seconds=0.6, cooldown=1.0):
+        self.min_distance = min_distance  # TUNE ME: 0.15 = 15% of the image width
+        self.max_seconds = max_seconds    # TUNE ME
+        self.cooldown = cooldown
+        self.last_trigger = 0.0
 
     def update(self, fs: FingerState, motion: MotionTracker):
         if not motion.ready:
             return {"active": False, "label": "SWIPE", "detail": "warming up"}
-        vx, _ = motion.velocity()
-        crossings = motion.zero_crossings_x()
-        # Fast + mostly one direction (few crossings) distinguishes a swipe from a wave.
-        active = abs(vx) > self.min_speed and crossings <= 1
+        t_end = motion.timestamps[-1]
+        recent = [(p[0], p[1]) for p, t in zip(motion.positions, motion.timestamps)
+                  if t_end - t <= self.max_seconds]
+        if len(recent) < 3:
+            return {"active": False, "label": "SWIPE", "detail": "too few frames"}
+        xs = [p[0] for p in recent]
+        ys = [p[1] for p in recent]
+        dx = xs[-1] - xs[0]
+        travel = max(xs) - min(xs)
+        dy = max(ys) - min(ys)
+        one_way = abs(dx) >= 0.75 * travel  # did not swing back (not a wave)
+
+        now = time.time()
+        active = (abs(dx) >= self.min_distance and one_way and dy < abs(dx)
+                  and now - self.last_trigger > self.cooldown)
+        if active:
+            self.last_trigger = now
         return {
             "active": active,
             "label": "SWIPE",
-            "detail": f"vx={vx:.2f} crossings={crossings}",
+            "detail": f"dx={dx:+.2f} travel={travel:.2f} dy={dy:.2f}",
         }
 
 

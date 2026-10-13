@@ -100,6 +100,35 @@ namespace LittlePrince.GuidedWalk
             return Vector3.Lerp(_samples[i - 1], _samples[i], d1 > d0 ? (distance - d0) / (d1 - d0) : 0f);
         }
 
+        /// <summary>
+        /// Distance along the path of the point closest to <paramref name="p"/> (ignoring height).
+        /// <paramref name="flatGap"/> = how far <paramref name="p"/> is from the path, on the ground plane.
+        /// </summary>
+        public float ClosestDistance(Vector3 p, out float flatGap)
+        {
+            flatGap = float.MaxValue;
+            if (_samples.Count == 0) return 0f;
+            float best = 0f;
+            var q = new Vector2(p.x, p.z);
+            for (int i = 1; i < _samples.Count; i++)
+            {
+                var a = new Vector2(_samples[i - 1].x, _samples[i - 1].z);
+                var b = new Vector2(_samples[i].x, _samples[i].z);
+                Vector2 ab = b - a;
+                float t = ab.sqrMagnitude > 1e-8f ? Mathf.Clamp01(Vector2.Dot(q - a, ab) / ab.sqrMagnitude) : 0f;
+                float gap = Vector2.Distance(q, a + ab * t);
+                if (gap < flatGap)
+                {
+                    flatGap = gap;
+                    best = Mathf.Lerp(_distances[i - 1], _distances[i], t);
+                }
+            }
+            if (_samples.Count == 1) flatGap = Vector2.Distance(q, new Vector2(_samples[0].x, _samples[0].z));
+            return best;
+        }
+
+        public float ClosestDistance(Vector3 p) => ClosestDistance(p, out _);
+
         /// <summary>Flat walking direction at a distance along the path.</summary>
         public Vector3 DirectionAt(float distance, float lookAhead = 1f)
         {
