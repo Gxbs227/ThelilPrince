@@ -1,0 +1,5 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+HandTracking-Python/hand_landmarker.task
