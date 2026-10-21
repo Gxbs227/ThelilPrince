@@ -9,10 +9,10 @@ EditorBuildSettings:
     path: Assets/LittlePrince/Scenes/Main.unity
     guid: 03921b9aa612b57449cbb58ed3e2133e
   - enabled: 1
-    path: Assets/LittlePrince/Scenes/Stages/01_Desert.unity
+    path: Assets/LittlePrince/Scenes/Stages/01_Tutorial.unity
     guid: 7dacd9804222fbd4dbbb7a73dd45c37b
   - enabled: 1
-    path: Assets/LittlePrince/Scenes/Stages/02_Garden.unity
+    path: Assets/LittlePrince/Scenes/Stages/02_Desert-Garden.unity
     guid: b7ab735d5a5c5ed40a90ab05930e81ea
   - enabled: 1
     path: Assets/LittlePrince/Scenes/Stages/03_Village.unity

@@ -10,7 +10,10 @@ namespace LittlePrince.GuidedWalk
     /// Guided walk: moves the Player gently along a <see cref="GuidedPath"/>, pausing
     /// at <see cref="PathStop"/>s. The hand never has to steer:
     ///
-    ///   Hand left / right / up / down -> look around a little (like turning your head)
+    ///   Hand left / right / up / down -> look around a little (like turning your head);
+    ///                                    keep it near the edge and the view keeps turning
+    ///                                    (Exploring), so you can look up at roofs, down the
+    ///                                    streets, behind you... It drifts back when centred.
     ///   Point                         -> aim the cursor (HandCursor) at things
     ///   Pinch                         -> touch; the view holds still while pinching
     ///   Fist                          -> pause the walk (rest), open the hand to continue
@@ -44,6 +47,20 @@ namespace LittlePrince.GuidedWalk
         [Tooltip("How quickly the body turns to follow the path's curves.")]
         public float turnSmoothing = 2f;
 
+        [Header("Exploring (hand held near the edge keeps turning the view)")]
+        public bool edgePan = true;
+        [Tooltip("How far from the centre the hand must be to keep turning (0.5 = the edge of the image).")]
+        [Range(0.15f, 0.48f)] public float panZone = 0.32f;
+        [Tooltip("Turning speed with the hand right at the edge (degrees per second).")]
+        public float panSpeed = 50f;
+        [Tooltip("Furthest the view can turn left/right from the walking direction (degrees).")]
+        public float maxYaw = 120f;
+        public float maxPitchUp = 45f;
+        public float maxPitchDown = 40f;
+        [Tooltip("Seconds with the hand centred (or no hand) before the view drifts back to the path.")]
+        public float recenterDelay = 2.5f;
+        public float recenterSpeed = 30f;
+
         [Header("Hand")]
         [Tooltip("Make a fist to pause the walk; open the hand to continue.")]
         public bool fistPauses = true;
@@ -61,7 +78,8 @@ namespace LittlePrince.GuidedWalk
         public float Distance => _distance;
         public float CurrentSpeed => _speed;
 
-        float _distance, _speed, _bodyYaw, _lookYaw, _lookPitch;
+        float _distance, _speed, _bodyYaw, _lookYaw, _lookPitch, _panYaw, _panPitch, _centredFor;
+        bool _recenterNow;
         readonly List<(float distance, PathStop stop)> _stops = new List<(float, PathStop)>();
         int _nextStop;
         bool _started;
@@ -181,7 +199,8 @@ namespace LittlePrince.GuidedWalk
             }
 
             // ---- Looking around with the hand -------------------------------------------
-            float targetLookYaw = _lookYaw, targetLookPitch = _lookPitch;
+            float targetLookYaw = _lookYaw - _panYaw, targetLookPitch = _lookPitch - _panPitch;
+            bool centred = true;
             if (hand == null)
             {
                 targetLookYaw = 0f;
@@ -192,9 +211,32 @@ namespace LittlePrince.GuidedWalk
                 Vector2 offset = hand.Palm - new Vector2(0.5f, 0.5f);
                 targetLookYaw = ApplyDeadZone(offset.x) * 2f * lookAroundYaw;
                 targetLookPitch = -ApplyDeadZone(offset.y) * 2f * lookAroundPitch;
+                centred = Mathf.Abs(offset.x) < deadZone && Mathf.Abs(offset.y) < deadZone;
+
+                if (edgePan)
+                {
+                    float px = EdgeAmount(offset.x), py = EdgeAmount(offset.y);
+                    if (px != 0f || py != 0f) _recenterNow = false;
+                    _panYaw += px * panSpeed * dt;
+                    _panPitch -= py * panSpeed * dt; // hand up = look up (negative pitch)
+                }
             }
-            _lookYaw = Mathf.Lerp(_lookYaw, targetLookYaw, dt * lookSmoothing);
-            _lookPitch = Mathf.Lerp(_lookPitch, targetLookPitch, dt * lookSmoothing);
+            else centred = false;
+
+            // Drift back toward the path after a while (right away when arriving at a stop).
+            _centredFor = centred ? _centredFor + dt : 0f;
+            if (_recenterNow || _centredFor > recenterDelay)
+            {
+                float step = recenterSpeed * (_recenterNow ? 3f : 1f) * dt;
+                _panYaw = Mathf.MoveTowards(_panYaw, 0f, step);
+                _panPitch = Mathf.MoveTowards(_panPitch, 0f, step);
+                if (_panYaw == 0f && _panPitch == 0f) _recenterNow = false;
+            }
+            _panYaw = Mathf.Clamp(_panYaw, -Mathf.Max(0f, maxYaw - lookAroundYaw), Mathf.Max(0f, maxYaw - lookAroundYaw));
+            _panPitch = Mathf.Clamp(_panPitch, -Mathf.Max(0f, maxPitchUp - lookAroundPitch), Mathf.Max(0f, maxPitchDown - lookAroundPitch));
+
+            _lookYaw = Mathf.Lerp(_lookYaw, targetLookYaw + _panYaw, dt * lookSmoothing);
+            _lookPitch = Mathf.Lerp(_lookPitch, targetLookPitch + _panPitch, dt * lookSmoothing);
 
             Place(snapRotation: false);
         }
@@ -203,6 +245,7 @@ namespace LittlePrince.GuidedWalk
         {
             _nextStop = index;
             CurrentStop = _stops[index].stop;
+            _recenterNow = true; // face what the stop is about
             CurrentStop.Arrive();
             StopReached?.Invoke(CurrentStop);
         }
@@ -210,9 +253,7 @@ namespace LittlePrince.GuidedWalk
         void Place(bool snapRotation)
         {
             Vector3 pos = path.PositionAt(_distance);
-            if (snapToGround && Physics.Raycast(pos + Vector3.up * 5f, Vector3.down, out var hit, 20f,
-                                                groundLayers, QueryTriggerInteraction.Ignore))
-                pos.y = hit.point.y;
+            if (snapToGround && TryGround(pos, snapRotation ? pos.y : transform.position.y, out float groundY)) pos.y = groundY;
             transform.position = pos;
 
             // Body faces along the path, or toward the stop's lookAt target while waiting.
@@ -233,6 +274,43 @@ namespace LittlePrince.GuidedWalk
                 transform.rotation = Quaternion.Euler(0f, _bodyYaw + _lookYaw, 0f);
                 pitchPivot.localRotation = Quaternion.Euler(_lookPitch, 0f, 0f);
             }
+        }
+
+        static readonly RaycastHit[] Hits = new RaycastHit[16];
+
+        /// <summary>
+        /// Ground under the path: the highest walkable surface no more than half a metre above the
+        /// feet (steps, bridges), so roofs, eaves, fences or a well beside the path are not climbed onto.
+        /// </summary>
+        bool TryGround(Vector3 pos, float feetY, out float y)
+        {
+            y = 0f;
+            int n = Physics.RaycastNonAlloc(new Vector3(pos.x, feetY + 20f, pos.z), Vector3.down, Hits, 60f,
+                                            groundLayers, QueryTriggerInteraction.Ignore);
+            bool step = false, any = false;
+            float lowest = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                var h = Hits[i];
+                if (h.transform.IsChildOf(transform)) continue;
+                if (!any || h.point.y < lowest) lowest = h.point.y;
+                any = true;
+                if (h.normal.y > 0.6f && h.point.y <= feetY + 0.5f && (!step || h.point.y > y))
+                {
+                    y = h.point.y;
+                    step = true;
+                }
+            }
+            if (!step && any) y = lowest;
+            return any;
+        }
+
+        /// <summary>-1..1: how far past the pan zone the hand is (0 inside it).</summary>
+        float EdgeAmount(float v)
+        {
+            float a = Mathf.Abs(v);
+            if (a <= panZone) return 0f;
+            return Mathf.Sign(v) * Mathf.Clamp01((a - panZone) / Mathf.Max(0.01f, 0.5f - panZone));
         }
 
         float ApplyDeadZone(float v)

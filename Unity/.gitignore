@@ -33,3 +33,16 @@ crashlytics-build.properties
 *.apk
 *.aab
 *.unitypackage
+
+# Asset Store packs: each person imports them from their own Unity account
+# (their licences don't allow sharing them in a public repository)
+/[Aa]ssets/Synty/
+/[Aa]ssets/Synty.meta
+/[Aa]ssets/Suntail Village/
+/[Aa]ssets/Suntail Village.meta
+/[Aa]ssets/LineKotsi/
+/[Aa]ssets/LineKotsi.meta
+/[Aa]ssets/___www.unityassetcollection.com___.txt*
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta
+/[Aa]ssets/**/sky_linekotsi_*

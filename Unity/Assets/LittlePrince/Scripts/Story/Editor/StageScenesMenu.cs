@@ -14,7 +14,9 @@ namespace LittlePrince.Story.EditorTools
     /// puts them in File > Build Settings in the right order:
     ///
     ///   Scenes/Main.unity                  shared: hand tracking, player, story flow, UI
-    ///   Scenes/Stages/01_Desert.unity …    one scene per stage, one owner each
+    ///   Scenes/Stages/01_Tutorial.unity …  one scene per stage, one owner each
+    ///
+    /// Scenes that no longer exist (renamed or deleted) are taken out of Build Settings.
     /// </summary>
     public static class StageScenesMenu
     {
@@ -23,11 +25,10 @@ namespace LittlePrince.Story.EditorTools
 
         public static readonly string[] StageScenes =
         {
-            ScenesFolder + "/Stages/01_Desert.unity",
-            ScenesFolder + "/Stages/02_Garden.unity",
+            ScenesFolder + "/Stages/01_Tutorial.unity",
+            ScenesFolder + "/Stages/02_Desert-Garden.unity",
             ScenesFolder + "/Stages/03_Village.unity",
             ScenesFolder + "/Stages/04_Space.unity",
-            ScenesFolder + "/Stages/05_Final.unity",
         };
 
         [MenuItem("Little Prince/Create Stage Scenes")]
@@ -61,7 +62,7 @@ namespace LittlePrince.Story.EditorTools
             var ordered = new List<EditorBuildSettingsScene> { new EditorBuildSettingsScene(MainScene, true) };
             ordered.AddRange(StageScenes.Select(p => new EditorBuildSettingsScene(p, true)));
             foreach (var s in EditorBuildSettings.scenes)
-                if (ordered.All(o => o.path != s.path)) ordered.Add(s);
+                if (ordered.All(o => o.path != s.path) && File.Exists(s.path)) ordered.Add(s);
             EditorBuildSettings.scenes = ordered.ToArray();
 
             if (!string.IsNullOrEmpty(current) && File.Exists(current)) EditorSceneManager.OpenScene(current);

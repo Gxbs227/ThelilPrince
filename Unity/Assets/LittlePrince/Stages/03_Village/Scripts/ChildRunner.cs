@@ -54,6 +54,8 @@ namespace LittlePrince.Stages.Village
         [Header("Look")]
         public bool snapToGround = true;
         public LayerMask groundLayers = ~0;
+        [Tooltip("Highest step the child walks up onto (kerbs, stairs). Anything taller (roofs, walls, fences) is not ground.")]
+        public float maxStepUp = 0.4f;
         public float turnSpeed = 10f;
         [Tooltip("Little hop while running (placeholders without animation).")]
         public float bobHeight = 0.08f;
@@ -70,7 +72,7 @@ namespace LittlePrince.Stages.Village
 
         public State CurrentState { get; private set; } = State.Waiting;
 
-        float _d, _leaveD = float.MaxValue, _heightOffset, _hideTimer, _duck, _runStarted = -999f, _bobTime;
+        float _d, _leaveD = float.MaxValue, _feetOffset, _baseY, _hideTimer, _duck, _runStarted = -999f, _bobTime;
         bool _onPath, _appeared, _subscribed, _initialised;
         GuidedPathWalker _subscribedWalker;
         Animator _animator;
@@ -89,7 +91,15 @@ namespace LittlePrince.Stages.Village
         {
             if (_initialised) return;
             _initialised = true;
-            _heightOffset = snapToGround && TryGround(transform.position, out float g) ? transform.position.y - g : 0f;
+            // Pivot -> feet, from the model itself (works for the capsule placeholders and real models alike).
+            var renderers = GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
+            {
+                float feet = renderers[0].bounds.min.y;
+                foreach (var r in renderers) feet = Mathf.Min(feet, r.bounds.min.y);
+                _feetOffset = Mathf.Max(0f, transform.position.y - feet);
+            }
+            _baseY = transform.position.y;
             _animator = GetComponentInChildren<Animator>();
             if (_animator != null)
                 foreach (var p in _animator.parameters)
@@ -209,12 +219,14 @@ namespace LittlePrince.Stages.Village
             return arrived;
         }
 
+        /// <summary>Puts the child's feet on the ground at <paramref name="pos"/> (x, z); hop and duck are added on top.</summary>
         void SetPosition(Vector3 pos, bool moving)
         {
-            if (snapToGround && TryGround(pos, out float g)) pos.y = g + _heightOffset;
+            // _baseY is the height without hop/duck, so they can never pile up frame after frame.
+            if (snapToGround && TryGround(pos, _baseY - _feetOffset, out float g)) _baseY = g + _feetOffset;
             if (moving) _bobTime += Time.deltaTime;
             else _bobTime = 0f;
-            pos.y += Mathf.Abs(Mathf.Sin(_bobTime * bobFrequency * 0.5f)) * bobHeight - _duck;
+            pos.y = _baseY + Mathf.Abs(Mathf.Sin(_bobTime * bobFrequency * 0.5f)) * bobHeight - _duck;
             transform.position = pos;
         }
 
@@ -225,20 +237,31 @@ namespace LittlePrince.Stages.Village
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), dt * turnSpeed);
         }
 
-        /// <summary>Lowest hit straight below (so bushes and props don't count as ground).</summary>
-        bool TryGround(Vector3 pos, out float y)
+        /// <summary>
+        /// Ground under (x, z): the highest walkable surface no more than Max Step Up above the
+        /// child's feet (so roofs, fences and walls overhead don't count); otherwise the lowest one.
+        /// </summary>
+        bool TryGround(Vector3 pos, float feetY, out float y)
         {
             y = 0f;
-            int n = Physics.RaycastNonAlloc(new Vector3(pos.x, pos.y + 3f, pos.z), Vector3.down, Hits, 20f,
+            int n = Physics.RaycastNonAlloc(new Vector3(pos.x, feetY + 20f, pos.z), Vector3.down, Hits, 60f,
                                             groundLayers, QueryTriggerInteraction.Ignore);
-            bool found = false;
+            bool step = false, any = false;
+            float lowest = 0f;
             for (int i = 0; i < n; i++)
             {
-                if (Hits[i].transform.IsChildOf(transform)) continue;
-                if (!found || Hits[i].point.y < y) y = Hits[i].point.y;
-                found = true;
+                var h = Hits[i];
+                if (h.transform.IsChildOf(transform)) continue;
+                if (!any || h.point.y < lowest) lowest = h.point.y;
+                any = true;
+                if (h.normal.y > 0.6f && h.point.y <= feetY + maxStepUp && (!step || h.point.y > y))
+                {
+                    y = h.point.y;
+                    step = true;
+                }
             }
-            return found;
+            if (!step && any) y = lowest;
+            return any;
         }
 
         bool IsVisibleToCamera()
